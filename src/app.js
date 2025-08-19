@@ -1,20 +1,35 @@
 // src/app.js
-require('dotenv').config(); // 👈 Esto al inicio, antes de cualquier otra cosa
+require('dotenv').config();
 
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
-
-// Aquí ya apuntamos correctamente al firebase.js que está en src
 const { db } = require('./firebase');
 
 const app = express();
 
-// Middlewares
+// 🔥 Lista de orígenes permitidos
+const allowedOrigins = [
+  'http://127.0.0.1:4000',             // pruebas locales
+  'http://localhost:4000',             // pruebas locales (otra variante)
+  'https://oilcasan-formulario.web.app', // tu hosting en Firebase
+  'https://oilcasan-formulario.firebaseapp.com' // alias de Firebase
+];
+
 app.use(cors({
-    origin: 'http://127.0.0.1:5500', // O tu URL del front
-    credentials: true
+  origin: function (origin, callback) {
+    // Permitir requests sin origin (ej: Postman, curl)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('CORS not allowed for this origin: ' + origin), false);
+    }
+  },
+  credentials: true
 }));
+
 app.use(morgan('dev'));
 app.use(express.json());
 
@@ -30,11 +45,11 @@ app.use(require('./routes/menu/menu'));
 
 // Manejador de errores global
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-    });
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Error interno del servidor'
+  });
 });
 
 module.exports = app;
