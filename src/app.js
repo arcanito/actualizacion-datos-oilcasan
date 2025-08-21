@@ -10,11 +10,13 @@ const app = express();
 
 // 🔥 Lista de orígenes permitidos
 const allowedOrigins = [
-  'http://127.0.0.1:4000',             // pruebas locales
-  'http://localhost:4000',             // pruebas locales (otra variante)
-  'https://oilcasan-formulario.web.app', // tu hosting en Firebase
-  'https://oilcasan-formulario.firebaseapp.com' // alias de Firebase
+  'http://127.0.0.1:4000',
+  'http://localhost:4000',
+  'https://oilcasan-formulario.web.app',
+  'https://oilcasan-formulario.firebaseapp.com',
+  'https://oilcasan-formulario-d6dd1.web.app' // 🔥 el hosting correcto de Firebase
 ];
+
 
 app.use(cors({
   origin: function (origin, callback) {
