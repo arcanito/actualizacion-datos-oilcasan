@@ -2,37 +2,46 @@
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
-const { db } = require('./firebase');
 
 const app = express();
 
-// ✅ Permite ambos proyectos en *.web.app y *.firebaseapp.com (sin importar trailing slashes)
-const ORIGIN_REGEX = /^https:\/\/(registro-de-datos-oilcasan|oilcasan-formulario)\.(web\.app|firebaseapp\.com)$/i;
+// 🔒 Whitelist explícita (sin / al final)
+const WHITELIST = new Set([
+  'http://localhost:4000',
+  'http://127.0.0.1:4000',
+
+  // Proyecto viejo
+  'https://oilcasan-formulario.web.app',
+  'https://oilcasan-formulario.firebaseapp.com',
+
+  // Proyecto nuevo
+  'https://registro-de-datos-oilcasan.web.app',
+  'https://registro-de-datos-oilcasan.firebaseapp.com',
+]);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Postman/cURL o llamadas internas
+      // Permite llamadas sin origin (Postman/cURL/monitoreo)
       if (!origin) return callback(null, true);
 
-      const clean = origin.replace(/\/+$/, '');
-      const ok = ORIGIN_REGEX.test(clean);
+      const cleanOrigin = origin.toLowerCase().replace(/\/+$/, '');
+      const allowed = WHITELIST.has(cleanOrigin);
 
-      if (ok) {
+      if (allowed) {
         return callback(null, true);
       } else {
-        console.warn('❌ CORS bloqueado para:', origin);
+        console.warn('❌ CORS bloqueado para:', origin, '→ normalizado:', cleanOrigin);
         return callback(new Error('CORS not allowed for this origin: ' + origin), false);
       }
     },
     credentials: true,
-    // (opcional) si tu frontend envía headers personalizados
-    allowedHeaders: ['Content-Type', 'Authorization'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 
-// Muy importante: responder preflight
+// Responder preflight de todo
 app.options('*', cors());
 
 app.use(morgan('dev'));
@@ -48,7 +57,7 @@ app.use(require('./routes/stats/stats'));
 app.use(require('./routes/forms_list/forms_list'));
 app.use(require('./routes/menu/menu'));
 
-// Healthcheck (útil para probar CORS rápido)
+// Healthcheck
 app.get('/', (req, res) => {
   res.json({
     success: true,
