@@ -23,7 +23,7 @@ console.log('🔐 ALLOWED_HOSTS =', [...ALLOWED_HOSTS].join(', '));
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
+    if (!origin) return cb(null, true); // curl/Postman
     const host = hostFrom(origin);
     const allowed = ALLOWED_HOSTS.has(host);
     console.log('🌐 CORS check → origin:', origin, 'host:', host, 'allowed:', allowed);
@@ -32,12 +32,15 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization']
+  allowedHeaders: ['Content-Type','Authorization'],
 }));
 
-// ⚠️ EN EXPRESS 5: usar '(.*)' o eliminar esta línea
-// app.options('*', cors());   // ❌ causa el error
-app.options('(.*)', cors());   // ✅
+// ❌ No usar '*' ni '(.*)' sin barra en Express 5
+// app.options('*', cors());          // NO
+// app.options('(.*)', cors());       // NO
+
+// ✅ Si quieres mantener el preflight global, usa:
+app.options('/(.*)', cors());         // SÍ (o elimina esta línea para la Opción 1)
 
 app.use(morgan('dev'));
 app.use(express.json());
@@ -58,7 +61,7 @@ app.get('/', (req, res) => {
     ok: true,
     service: 'backend-oilcasan',
     origin: req.headers.origin || null,
-    time: new Date().toISOString()
+    time: new Date().toISOString(),
   });
 });
 
