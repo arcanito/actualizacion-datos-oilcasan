@@ -5,7 +5,7 @@ const cors    = require('cors');
 
 const app = express();
 
-// Hosts permitidos (solo host, sin protocolo ni barra final)
+// ✅ Hosts permitidos (SOLO host: sin protocolo ni barra)
 const ALLOWED_HOSTS = new Set([
   'oilcasan-formulario.web.app',
   'oilcasan-formulario.firebaseapp.com',
@@ -15,30 +15,25 @@ const ALLOWED_HOSTS = new Set([
   '127.0.0.1:4000',
 ]);
 
-function isAllowedOrigin(origin) {
-  try {
-    const { host } = new URL(origin);
-    return ALLOWED_HOSTS.has(host);
-  } catch {
-    return false;
-  }
+function hostFrom(origin) {
+  try { return new URL(origin).host.toLowerCase(); }
+  catch { return ''; }
 }
+
+console.log('🔐 ALLOWED_HOSTS:', [...ALLOWED_HOSTS].join(', '));
 
 app.use(cors({
   origin: (origin, cb) => {
-    // Requests sin origin (curl/Postman) → permitir
-    if (!origin) return cb(null, true);
+    if (!origin) return cb(null, true); // curl/Postman
 
-    const ok = isAllowedOrigin(origin);
-    if (ok) return cb(null, true);
+    const host = hostFrom(origin);
+    const allowed = ALLOWED_HOSTS.has(host);
 
-    // Log de diagnóstico (host que llegó y lista actual)
-    try {
-      const { host } = new URL(origin);
-      console.warn('❌ CORS bloqueado. Origin:', origin, 'Host:', host);
-    } catch {
-      console.warn('❌ CORS bloqueado. Origin inválido:', origin);
-    }
+    console.log('🌐 CORS check → origin:', origin, 'host:', host, 'allowed:', allowed);
+
+    if (allowed) return cb(null, true);
+
+    console.warn('❌ CORS bloqueado. Origin:', origin, 'Host:', host);
     return cb(new Error('CORS not allowed for this origin: ' + origin), false);
   },
   credentials: true,
@@ -46,13 +41,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization'],
 }));
 
-// Preflight
 app.options('*', cors());
 
 app.use(morgan('dev'));
 app.use(express.json());
 
-// ---- Rutas de tu API ----
+// Rutas
 app.use(require('./routes/login_user/login_user'));
 app.use(require('./routes/password_reset/password_reset'));
 app.use(require('./routes/logout/logout'));
@@ -72,7 +66,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Errores (incluye CORS)
+// Errores
 app.use((err, req, res, next) => {
   if (String(err).includes('CORS not allowed')) {
     return res.status(403).json({ success: false, message: String(err) });
