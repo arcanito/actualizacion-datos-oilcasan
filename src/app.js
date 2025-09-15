@@ -5,6 +5,8 @@ const cors    = require('cors');
 
 const app = express();
 
+/* ========== CORS ========== */
+// Usa solo host (sin protocolo/barras)
 const ALLOWED_HOSTS = new Set([
   'oilcasan-formulario.web.app',
   'oilcasan-formulario.firebaseapp.com',
@@ -21,31 +23,30 @@ function hostFrom(origin) {
 
 console.log('🔐 ALLOWED_HOSTS =', [...ALLOWED_HOSTS].join(', '));
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/Postman
+    if (!origin) return cb(null, true); // curl/Postman/cron
     const host = hostFrom(origin);
     const allowed = ALLOWED_HOSTS.has(host);
     console.log('🌐 CORS check → origin:', origin, 'host:', host, 'allowed:', allowed);
-    return allowed ? cb(null, true)
-                   : cb(new Error('CORS not allowed for this origin: ' + origin), false);
+    if (allowed) return cb(null, true);
+    return cb(new Error('CORS not allowed for this origin: ' + origin), false);
   },
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
-}));
+};
 
-// ❌ No usar '*' ni '(.*)' sin barra en Express 5
-// app.options('*', cors());          // NO
-// app.options('(.*)', cors());       // NO
+// Preflight para TODO (¡sin patrones raros!)
+app.options('*', cors(corsOptions));
+// CORS normal
+app.use(cors(corsOptions));
 
-// ✅ Si quieres mantener el preflight global, usa:
-app.options('/(.*)', cors());         // SÍ (o elimina esta línea para la Opción 1)
-
+/* ========== MIDDLEWARES ========== */
 app.use(morgan('dev'));
 app.use(express.json());
 
-// Rutas
+/* ========== RUTAS ========== */
 app.use(require('./routes/login_user/login_user'));
 app.use(require('./routes/password_reset/password_reset'));
 app.use(require('./routes/logout/logout'));
@@ -65,12 +66,11 @@ app.get('/', (req, res) => {
   });
 });
 
-// Errores
+/* ========== ERRORES ========== */
 app.use((err, req, res, next) => {
-  const msg = String(err && err.message ? err.message : err);
-  if (msg.includes('CORS not allowed')) {
-    console.warn('🚫', msg);
-    return res.status(403).json({ success: false, message: msg });
+  // Si el error vino del callback de CORS, responde 403 en JSON
+  if (String(err).startsWith('Error: CORS not allowed')) {
+    return res.status(403).json({ success: false, message: String(err) });
   }
   console.error('🔥 Error:', err && err.stack ? err.stack : err);
   res.status(500).json({ success: false, message: 'Error interno del servidor' });
