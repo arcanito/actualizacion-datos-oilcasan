@@ -14,7 +14,7 @@ const allowedOrigins = [
   'http://localhost:4000',
   'https://oilcasan-formulario.web.app',
   'https://oilcasan-formulario.firebaseapp.com',
-  'https://oilcasan-formulario-d6dd1.web.app' // 🔥 el hosting correcto de Firebase
+  'https://registro-de-datos-oilcasan.web.app/' // 🔥 el hosting correcto de Firebase
 ];
 
 
