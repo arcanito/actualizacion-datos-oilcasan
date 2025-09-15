@@ -5,8 +5,8 @@ const cors    = require('cors');
 
 const app = express();
 
-/* ========== CORS ========== */
-// Usa solo host (sin protocolo/barras)
+/* ================== CORS ================== */
+/** Usa SOLO host (sin “https://” ni “/”) */
 const ALLOWED_HOSTS = new Set([
   'oilcasan-formulario.web.app',
   'oilcasan-formulario.firebaseapp.com',
@@ -37,16 +37,16 @@ const corsOptions = {
   allowedHeaders: ['Content-Type','Authorization'],
 };
 
-// Preflight para TODO (¡sin patrones raros!)
+// Preflight universal
 app.options('*', cors(corsOptions));
-// CORS normal
+// CORS para todas las rutas
 app.use(cors(corsOptions));
 
-/* ========== MIDDLEWARES ========== */
+/* ========== Middlewares ========== */
 app.use(morgan('dev'));
 app.use(express.json());
 
-/* ========== RUTAS ========== */
+/* ========== Rutas ========== */
 app.use(require('./routes/login_user/login_user'));
 app.use(require('./routes/password_reset/password_reset'));
 app.use(require('./routes/logout/logout'));
@@ -56,7 +56,7 @@ app.use(require('./routes/stats/stats'));
 app.use(require('./routes/forms_list/forms_list'));
 app.use(require('./routes/menu/menu'));
 
-// Healthcheck
+/* Healthchecks */
 app.get('/', (req, res) => {
   res.json({
     ok: true,
@@ -66,9 +66,11 @@ app.get('/', (req, res) => {
   });
 });
 
-/* ========== ERRORES ========== */
+app.get('/healthz', (req, res) => res.status(200).send('OK'));
+
+/* ========== Errores ========== */
 app.use((err, req, res, next) => {
-  // Si el error vino del callback de CORS, responde 403 en JSON
+  // Si viene del callback de CORS
   if (String(err).startsWith('Error: CORS not allowed')) {
     return res.status(403).json({ success: false, message: String(err) });
   }
