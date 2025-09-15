@@ -8,30 +8,44 @@ const { db } = require('./firebase');
 
 const app = express();
 
-// 🔥 Lista de orígenes permitidos
+// 🔥 Lista de orígenes permitidos (¡sin "/" al final!)
 const allowedOrigins = [
   'http://127.0.0.1:4000',
   'http://localhost:4000',
+
+  // hosting anterior (si aún lo usas)
   'https://oilcasan-formulario.web.app',
   'https://oilcasan-formulario.firebaseapp.com',
-  'https://registro-de-datos-oilcasan.web.app/' // 🔥 el hosting correcto de Firebase
+
+  // hosting nuevo
+  'https://registro-de-datos-oilcasan.web.app',
+  'https://registro-de-datos-oilcasan.firebaseapp.com'
 ];
 
-
+// Middleware CORS (antes de las rutas)
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir requests sin origin (ej: Postman, curl)
+    // Permitir requests sin origin (ej: Postman, curl, SSR)
     if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS not allowed for this origin: ' + origin), false);
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error('CORS not allowed for this origin: ' + origin), false);
-    }
+// Manejo explícito de preflight (OPTIONS)
+app.options('*', cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS not allowed for this origin: ' + origin), false);
   },
   credentials: true
 }));
 
+// Middlewares comunes
 app.use(morgan('dev'));
 app.use(express.json());
 
