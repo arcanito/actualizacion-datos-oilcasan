@@ -1,78 +1,57 @@
 // src/app.js
+require('dotenv').config();
+
 const express = require('express');
-const morgan  = require('morgan');
-const cors    = require('cors');
+const morgan = require('morgan');
+const cors = require('cors');
+const { db } = require('./firebase');
 
 const app = express();
 
-// ✅ Hosts permitidos (SOLO host: sin protocolo ni barra)
-const ALLOWED_HOSTS = new Set([
-  'oilcasan-formulario.web.app',
-  'oilcasan-formulario.firebaseapp.com',
-  'registro-de-datos-oilcasan.web.app',
-  'registro-de-datos-oilcasan.firebaseapp.com',
-  'localhost:4000',
-  '127.0.0.1:4000',
-]);
+// 🔥 Lista de orígenes permitidos
+const allowedOrigins = [
+  'http://127.0.0.1:4000',
+  'http://localhost:4000',
+  'https://oilcasan-formulario.web.app',
+  'https://oilcasan-formulario.firebaseapp.com',
+  'https://registro-de-datos-oilcasan.web.app' // 🔥 el hosting correcto de Firebase
+];
 
-function hostFrom(origin) {
-  try { return new URL(origin).host.toLowerCase(); }
-  catch { return ''; }
-}
-
-console.log('🔐 ALLOWED_HOSTS:', [...ALLOWED_HOSTS].join(', '));
 
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/Postman
+  origin: function (origin, callback) {
+    // Permitir requests sin origin (ej: Postman, curl)
+    if (!origin) return callback(null, true);
 
-    const host = hostFrom(origin);
-    const allowed = ALLOWED_HOSTS.has(host);
-
-    console.log('🌐 CORS check → origin:', origin, 'host:', host, 'allowed:', allowed);
-
-    if (allowed) return cb(null, true);
-
-    console.warn('❌ CORS bloqueado. Origin:', origin, 'Host:', host);
-    return cb(new Error('CORS not allowed for this origin: ' + origin), false);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('CORS not allowed for this origin: ' + origin), false);
+    }
   },
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
+  credentials: true
 }));
-
-app.options('*', cors());
 
 app.use(morgan('dev'));
 app.use(express.json());
 
 // Rutas
-app.use(require('./routes/login_user/login_user'));
-app.use(require('./routes/password_reset/password_reset'));
-app.use(require('./routes/logout/logout'));
-app.use(require('./routes/create_user/create_user'));
+app.use(require("./routes/login_user/login_user"));
+app.use(require("./routes/password_reset/password_reset"));
+app.use(require("./routes/logout/logout"));
+app.use(require("./routes/create_user/create_user"));
 app.use(require('./routes/forms/forms'));
 app.use(require('./routes/stats/stats'));
 app.use(require('./routes/forms_list/forms_list'));
 app.use(require('./routes/menu/menu'));
 
-// Healthcheck
-app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    service: 'backend-oilcasan',
-    origin: req.headers.origin || null,
-    time: new Date().toISOString(),
-  });
-});
-
-// Errores
+// Manejador de errores global
 app.use((err, req, res, next) => {
-  if (String(err).includes('CORS not allowed')) {
-    return res.status(403).json({ success: false, message: String(err) });
-  }
-  console.error('🔥 Error:', err && err.stack ? err.stack : err);
-  res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Error interno del servidor'
+  });
 });
 
 module.exports = app;
