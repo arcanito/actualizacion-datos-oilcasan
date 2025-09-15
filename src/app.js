@@ -5,41 +5,54 @@ const cors    = require('cors');
 
 const app = express();
 
-// ⚠️ SIN slashes finales
-const WHITELIST = new Set([
-  'http://localhost:4000',
-  'http://127.0.0.1:4000',
-  // proyecto anterior
-  'https://oilcasan-formulario.web.app',
-  'https://oilcasan-formulario.firebaseapp.com',
-  // proyecto nuevo
-  'https://registro-de-datos-oilcasan.web.app',
-  'https://registro-de-datos-oilcasan.firebaseapp.com',
+// Hosts permitidos (solo host, sin protocolo ni barra final)
+const ALLOWED_HOSTS = new Set([
+  'oilcasan-formulario.web.app',
+  'oilcasan-formulario.firebaseapp.com',
+  'registro-de-datos-oilcasan.web.app',
+  'registro-de-datos-oilcasan.firebaseapp.com',
+  'localhost:4000',
+  '127.0.0.1:4000',
 ]);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // Postman/cURL
-      const clean = origin.toLowerCase().replace(/\/+$/, ''); // normaliza y quita "/"
-      if (WHITELIST.has(clean)) return callback(null, true);
+function isAllowedOrigin(origin) {
+  try {
+    const { host } = new URL(origin);
+    return ALLOWED_HOSTS.has(host);
+  } catch {
+    return false;
+  }
+}
 
-      console.warn('❌ CORS bloqueado para:', origin, '→', clean);
-      return callback(new Error('CORS not allowed for this origin: ' + origin), false);
-    },
-    credentials: true,
-    methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-    allowedHeaders: ['Content-Type','Authorization'],
-  })
-);
+app.use(cors({
+  origin: (origin, cb) => {
+    // Requests sin origin (curl/Postman) → permitir
+    if (!origin) return cb(null, true);
 
-// Responder todos los preflight
+    const ok = isAllowedOrigin(origin);
+    if (ok) return cb(null, true);
+
+    // Log de diagnóstico (host que llegó y lista actual)
+    try {
+      const { host } = new URL(origin);
+      console.warn('❌ CORS bloqueado. Origin:', origin, 'Host:', host);
+    } catch {
+      console.warn('❌ CORS bloqueado. Origin inválido:', origin);
+    }
+    return cb(new Error('CORS not allowed for this origin: ' + origin), false);
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+}));
+
+// Preflight
 app.options('*', cors());
 
 app.use(morgan('dev'));
 app.use(express.json());
 
-// ---- RUTAS DE TU API ----
+// ---- Rutas de tu API ----
 app.use(require('./routes/login_user/login_user'));
 app.use(require('./routes/password_reset/password_reset'));
 app.use(require('./routes/logout/logout'));
@@ -49,7 +62,7 @@ app.use(require('./routes/stats/stats'));
 app.use(require('./routes/forms_list/forms_list'));
 app.use(require('./routes/menu/menu'));
 
-// Healthcheck para probar rápido en el navegador
+// Healthcheck
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -59,7 +72,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Manejo de errores (incluye CORS)
+// Errores (incluye CORS)
 app.use((err, req, res, next) => {
   if (String(err).includes('CORS not allowed')) {
     return res.status(403).json({ success: false, message: String(err) });
