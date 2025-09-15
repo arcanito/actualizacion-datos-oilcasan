@@ -7,15 +7,13 @@ const admin = require("firebase-admin");
 
 // 🔹 Configuración cliente (Frontend SDK, segura de usar)
 const firebaseConfig = {
-  apiKey: "AIzaSyAbkbbxWc-MGD_uNqrsd7YL62P8VYbk7k4",
-  authDomain: "oilcasan-formulario-d6dd1.firebaseapp.com",
-  projectId: "oilcasan-formulario-d6dd1",
-  storageBucket: "oilcasan-formulario-d6dd1.appspot.com", // ✅ corregido
-  messagingSenderId: "274537463748",
-  appId: "1:274537463748:web:d09bb7d30d50b4c049ee91",
-  measurementId: "G-VPMGG83399",
+  apiKey: "AIzaSyAUAgRSfORHbvOUd4k8jpNOhyq18rz-_hc",
+  authDomain: "registro-de-datos-oilcasan.firebaseapp.com",
+  projectId: "registro-de-datos-oilcasan",
+  storageBucket: "registro-de-datos-oilcasan.appspot.com", // ← usa *.appspot.com
+  messagingSenderId: "239159695711",
+  appId: "1:239159695711:web:b0ed36bd2963422adabeea"
 };
-
 // Inicialización del cliente Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
