@@ -1,20 +1,18 @@
 // src/app.js
 const express = require('express');
-const morgan = require('morgan');
-const cors = require('cors');
+const morgan  = require('morgan');
+const cors    = require('cors');
 
 const app = express();
 
-// 🔒 Whitelist explícita (sin / al final)
+// ⚠️ SIN slashes finales
 const WHITELIST = new Set([
   'http://localhost:4000',
   'http://127.0.0.1:4000',
-
-  // Proyecto viejo
+  // proyecto anterior
   'https://oilcasan-formulario.web.app',
   'https://oilcasan-formulario.firebaseapp.com',
-
-  // Proyecto nuevo
+  // proyecto nuevo
   'https://registro-de-datos-oilcasan.web.app',
   'https://registro-de-datos-oilcasan.firebaseapp.com',
 ]);
@@ -22,32 +20,26 @@ const WHITELIST = new Set([
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Permite llamadas sin origin (Postman/cURL/monitoreo)
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // Postman/cURL
+      const clean = origin.toLowerCase().replace(/\/+$/, ''); // normaliza y quita "/"
+      if (WHITELIST.has(clean)) return callback(null, true);
 
-      const cleanOrigin = origin.toLowerCase().replace(/\/+$/, '');
-      const allowed = WHITELIST.has(cleanOrigin);
-
-      if (allowed) {
-        return callback(null, true);
-      } else {
-        console.warn('❌ CORS bloqueado para:', origin, '→ normalizado:', cleanOrigin);
-        return callback(new Error('CORS not allowed for this origin: ' + origin), false);
-      }
+      console.warn('❌ CORS bloqueado para:', origin, '→', clean);
+      return callback(new Error('CORS not allowed for this origin: ' + origin), false);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders: ['Content-Type','Authorization'],
   })
 );
 
-// Responder preflight de todo
+// Responder todos los preflight
 app.options('*', cors());
 
 app.use(morgan('dev'));
 app.use(express.json());
 
-// Rutas
+// ---- RUTAS DE TU API ----
 app.use(require('./routes/login_user/login_user'));
 app.use(require('./routes/password_reset/password_reset'));
 app.use(require('./routes/logout/logout'));
@@ -57,22 +49,22 @@ app.use(require('./routes/stats/stats'));
 app.use(require('./routes/forms_list/forms_list'));
 app.use(require('./routes/menu/menu'));
 
-// Healthcheck
+// Healthcheck para probar rápido en el navegador
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: '✅ Backend OILCASAN activo',
+    service: 'backend-oilcasan',
     origin: req.headers.origin || null,
     time: new Date().toISOString(),
   });
 });
 
-// Manejo de errores
+// Manejo de errores (incluye CORS)
 app.use((err, req, res, next) => {
-  console.error('🔥 Error:', err && err.stack ? err.stack : err);
   if (String(err).includes('CORS not allowed')) {
     return res.status(403).json({ success: false, message: String(err) });
   }
+  console.error('🔥 Error:', err && err.stack ? err.stack : err);
   res.status(500).json({ success: false, message: 'Error interno del servidor' });
 });
 
