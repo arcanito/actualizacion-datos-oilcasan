@@ -55,7 +55,7 @@ const adminAuth = admin.auth();
 const adminDb = admin.firestore();
 
 module.exports = {
-  cliente,
+  // cliente
   auth,
   db,
   createUserWithEmailAndPassword,
@@ -64,7 +64,7 @@ module.exports = {
   getDoc,
   doc,
   storage,
-  admin,
+  // admin
   adminAuth,
   adminDb,
 };
