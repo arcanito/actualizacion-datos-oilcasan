@@ -1,13 +1,12 @@
 // src/routes/login_user/login_user.js
 const { Router } = require('express');
-const { signInWithEmailAndPassword, sendEmailVerification } = require('firebase/auth');
+const { signInWithEmailAndPassword } = require('firebase/auth');
 const { auth, db, getDoc, doc } = require('../../firebase');
 
 const router = Router();
 
 router.post('/login_user', async (req, res) => {
-  const email = String(req.body?.email || '').trim();
-  const password = String(req.body?.password || '');
+  const { email, password } = req.body || {};
 
   if (!email || !password) {
     return res.status(400).json({
@@ -17,25 +16,24 @@ router.post('/login_user', async (req, res) => {
   }
 
   try {
-    // Iniciar sesión con Firebase Authentication
+    // 1) Autenticar
     const cred = await signInWithEmailAndPassword(auth, email, password);
     const user = cred.user;
 
-    // Verificar que el correo esté confirmado
+    // 2) Verificar email (NO enviar correo desde backend)
     if (!user.emailVerified) {
-      await sendEmailVerification(user);
       return res.status(403).json({
         success: false,
-        message: 'Correo no verificado. Hemos enviado un nuevo enlace de verificación a tu email.',
-        emailSent: true,
+        message: 'Correo no verificado. Verifica tu email desde el enlace que te enviamos.',
+        emailVerified: false,
       });
     }
 
-    // Datos adicionales en Firestore
+    // 3) Datos extra desde Firestore
     const snap = await getDoc(doc(db, 'Users', user.uid));
-    const userData = snap.exists() ? snap.data() : {};
+    const profile = snap.exists() ? snap.data() : {};
 
-    // ID token real
+    // 4) Token real de Firebase (JWT)
     const idToken = await user.getIdToken();
 
     return res.status(200).json({
@@ -44,42 +42,48 @@ router.post('/login_user', async (req, res) => {
       user: {
         uid: user.uid,
         email: user.email,
-        role: userData.role || null,
+        role: profile.role || null,
         token: idToken,
       },
     });
   } catch (error) {
-    // 🔎 Log detallado en Render
-    console.error('❌ Error en /login_user:', {
+    // Logs útiles para Render
+    console.error('❌ /login_user error:', {
       code: error?.code,
       message: error?.message,
-      stack: error?.stack,
+      name: error?.name,
     });
 
-    // Mapeo de códigos comunes
-    let status = 500;
+    // Mapeo de errores
+    let statusCode = 401;
     let message = 'Error al iniciar sesión';
+
     switch (error?.code) {
       case 'auth/user-not-found':
-        status = 401; message = 'Usuario no registrado'; break;
+        message = 'Usuario no registrado';
+        break;
       case 'auth/wrong-password':
-        status = 401; message = 'Contraseña incorrecta'; break;
+        message = 'Contraseña incorrecta';
+        break;
       case 'auth/invalid-email':
-        status = 400; message = 'Correo inválido'; break;
+        message = 'Correo inválido';
+        break;
       case 'auth/too-many-requests':
-        status = 429; message = 'Demasiados intentos fallidos. Intenta más tarde.'; break;
+        statusCode = 429;
+        message = 'Demasiados intentos fallidos. Intenta más tarde.';
+        break;
       case 'auth/user-disabled':
-        status = 403; message = 'Esta cuenta ha sido desactivada'; break;
+        message = 'Esta cuenta ha sido desactivada';
+        break;
       default:
-        status = 500; message = 'Error al iniciar sesión';
+        statusCode = 500;
+        message = 'Error interno de autenticación';
     }
 
-    // En no-producción devolvemos más contexto para depurar
-    const isProd = process.env.NODE_ENV === 'production';
-    return res.status(status).json({
+    return res.status(statusCode).json({
       success: false,
       message,
-      ...(isProd ? {} : { code: error?.code || null, detail: error?.message || null })
+      code: error?.code || 'unknown',
     });
   }
 });
