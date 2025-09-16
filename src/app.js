@@ -5,13 +5,13 @@ const cors    = require('cors');
 
 const app = express();
 
-/* ================== CORS ================== */
-/** Usa SOLO host (sin “https://” ni “/”) */
+/* ========== CORS ========== */
+// Usa solo host (sin protocolo/barras)
 const ALLOWED_HOSTS = new Set([
-  'oilcasan-formulario.web.app',
-  'oilcasan-formulario.firebaseapp.com',
   'registro-de-datos-oilcasan.web.app',
   'registro-de-datos-oilcasan.firebaseapp.com',
+  'oilcasan-formulario.web.app',
+  'oilcasan-formulario.firebaseapp.com',
   'localhost:4000',
   '127.0.0.1:4000',
 ]);
@@ -25,28 +25,33 @@ console.log('🔐 ALLOWED_HOSTS =', [...ALLOWED_HOSTS].join(', '));
 
 const corsOptions = {
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/Postman/cron
+    // Permite peticiones sin origin (curl/Postman/cron)
+    if (!origin) return cb(null, true);
+
     const host = hostFrom(origin);
     const allowed = ALLOWED_HOSTS.has(host);
     console.log('🌐 CORS check → origin:', origin, 'host:', host, 'allowed:', allowed);
-    if (allowed) return cb(null, true);
-    return cb(new Error('CORS not allowed for this origin: ' + origin), false);
+
+    return allowed
+      ? cb(null, true)
+      : cb(new Error('CORS not allowed for this origin: ' + origin), false);
   },
-  credentials: true,
+  credentials: true, // ok incluso si no usas cookies
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
+  optionsSuccessStatus: 204,
 };
 
-// Preflight universal
+// Preflight para TODO (esto responde los OPTIONS con headers CORS)
 app.options('*', cors(corsOptions));
-// CORS para todas las rutas
+// CORS normal
 app.use(cors(corsOptions));
 
-/* ========== Middlewares ========== */
+/* ========== MIDDLEWARES ========== */
 app.use(morgan('dev'));
 app.use(express.json());
 
-/* ========== Rutas ========== */
+/* ========== RUTAS ========== */
 app.use(require('./routes/login_user/login_user'));
 app.use(require('./routes/password_reset/password_reset'));
 app.use(require('./routes/logout/logout'));
@@ -56,7 +61,7 @@ app.use(require('./routes/stats/stats'));
 app.use(require('./routes/forms_list/forms_list'));
 app.use(require('./routes/menu/menu'));
 
-/* Healthchecks */
+// Healthcheck
 app.get('/', (req, res) => {
   res.json({
     ok: true,
@@ -66,11 +71,8 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/healthz', (req, res) => res.status(200).send('OK'));
-
-/* ========== Errores ========== */
+/* ========== ERRORES ========== */
 app.use((err, req, res, next) => {
-  // Si viene del callback de CORS
   if (String(err).startsWith('Error: CORS not allowed')) {
     return res.status(403).json({ success: false, message: String(err) });
   }
