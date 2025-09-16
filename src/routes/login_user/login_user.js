@@ -1,5 +1,10 @@
+// src/routes/login_user/login_user.js
 const { Router } = require("express");
-const { signInWithEmailAndPassword } = require("firebase/auth");
+const {
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+} = require("firebase/auth");
+
 const { auth, adminDb } = require("../../firebase");
 
 const router = Router();
@@ -15,26 +20,29 @@ router.post("/login_user", async (req, res) => {
   }
 
   try {
-    // 1) Autenticar con Firebase Auth (SDK cliente)
+    // 1) Login con Auth (cliente)
     const cred = await signInWithEmailAndPassword(auth, email, password);
     const user = cred.user;
 
-    // 2) Bloquear si el correo no está verificado (no reenviamos email desde backend)
+    // 2) Verificación de email
     if (!user.emailVerified) {
+      try {
+        await sendEmailVerification(user);
+      } catch (_) {}
       return res.status(403).json({
         success: false,
         message:
-          "Correo no verificado. Revisa tu bandeja y verifica tu email antes de continuar.",
-        emailVerified: false,
+          "Correo no verificado. Hemos enviado un nuevo enlace de verificación a tu email.",
+        emailSent: true,
       });
     }
 
-    // 3) Leer el perfil con Admin SDK (no aplica reglas)
-    const snap = await adminDb.collection("Users").doc(user.uid).get();
-    const profile = snap.exists ? snap.data() : {};
+    // 3) Leer datos extra con Admin (omite reglas)
+    const snap = await adminDb.doc(`Users/${user.uid}`).get();
+    const userData = snap.exists ? snap.data() : {};
 
-    // 4) Emitir ID Token real para el frontend (lo usa en Authorization: Bearer ...)
-    const idToken = await user.getIdToken();
+    // 4) ID Token real
+    const token = await user.getIdToken();
 
     return res.status(200).json({
       success: true,
@@ -42,21 +50,18 @@ router.post("/login_user", async (req, res) => {
       user: {
         uid: user.uid,
         email: user.email,
-        role: profile.role || null,
-        token: idToken,
+        role: userData.role ?? null,
+        token,
       },
     });
   } catch (error) {
-    console.error("❌ /login_user error:", {
-      code: error?.code,
-      message: error?.message,
-      name: error?.name,
-    });
+    console.error("❌ /login_user error:", error);
 
-    let statusCode = 401;
+    // Mapeo de errores comunes de Auth
+    let status = 401;
     let message = "Error al iniciar sesión";
 
-    switch (error?.code) {
+    switch (error.code) {
       case "auth/user-not-found":
         message = "Usuario no registrado";
         break;
@@ -67,22 +72,17 @@ router.post("/login_user", async (req, res) => {
         message = "Correo inválido";
         break;
       case "auth/too-many-requests":
-        statusCode = 429;
+        status = 429;
         message = "Demasiados intentos fallidos. Intenta más tarde.";
         break;
       case "auth/user-disabled":
         message = "Esta cuenta ha sido desactivada";
         break;
       default:
-        statusCode = 500;
-        message = "Error interno de autenticación";
+        status = 500;
     }
 
-    return res.status(statusCode).json({
-      success: false,
-      message,
-      code: error?.code || "unknown",
-    });
+    return res.status(status).json({ success: false, message });
   }
 });
 
