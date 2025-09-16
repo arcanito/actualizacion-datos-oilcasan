@@ -1,81 +1,116 @@
 // src/routes/menu/menu.js
-const { Router } = require("express");
-const { adminAuth, adminDb } = require("../../firebase"); // <- usa Admin SDK
+const { Router } = require('express');
+const admin = require('firebase-admin');
+const { adminAuth, adminDb } = require('../../firebase');
+const { Timestamp } = require('firebase-admin/firestore');
 
 const router = Router();
 
 /**
- * GET /auth/me?uid=<uid>
- * Requiere: Authorization: Bearer <ID_TOKEN>
+ * Útil para depurar: devuelve el uid decodificado del token
+ * GET /whoami
+ * Header: Authorization: Bearer <ID_TOKEN>
  */
-router.get("/auth/me", async (req, res) => {
+router.get('/whoami', async (req, res) => {
   try {
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length)
-      : null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ success: false, message: 'Falta token' });
 
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Falta el token Bearer",
-      });
-    }
+    const decoded = await adminAuth.verifyIdToken(token);
+    return res.json({
+      success: true,
+      projectId: admin.app().options.projectId || null,
+      uid: decoded.uid,
+      email: decoded.email || null,
+    });
+  } catch (e) {
+    return res.status(401).json({ success: false, message: 'Token inválido' });
+  }
+});
 
-    // 1) Verificar ID token con Admin
+/**
+ * GET /auth/me?uid=<uid> (uid opcional, solo para comparar)
+ * Header: Authorization: Bearer <ID_TOKEN>
+ */
+router.get('/auth/me', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ success: false, message: 'Falta el token Bearer' });
+
     const decoded = await adminAuth.verifyIdToken(token);
     const tokenUid = decoded.uid;
+    const qUid = (req.query?.uid || '').trim();
 
-    // 2) (opcional) Validar que el uid de la query coincide
-    const { uid } = req.query || {};
-    if (uid && uid !== tokenUid) {
-      return res.status(403).json({
-        success: false,
-        message: "UID inválido para este token",
-      });
+    // Log de diagnóstico
+    console.log('[auth/me] project:', admin.app().options.projectId, 'tokenUid:', tokenUid, 'queryUid:', qUid || '(none)');
+
+    if (qUid && qUid !== tokenUid) {
+      // Si el front envía un uid distinto al del token, no lo usamos, pero avisamos.
+      console.warn('[auth/me] uid de query no coincide con tokenUid');
     }
 
-    // 3) Leer Firestore con Admin SDK (NO con SDK de cliente)
-    const snap = await adminDb.doc(`Users/${tokenUid}`).get();
+    // 1) Intento directo por UID correcto
+    let userRef = adminDb.doc(`Users/${tokenUid}`);
+    let snap = await userRef.get();
+
+    // 2) Si no existe, intentamos por email para migrar documentos con ID aleatorio
+    if (!snap.exists && decoded.email) {
+      const q = await adminDb.collection('Users').where('email', '==', decoded.email).limit(1).get();
+      if (!q.empty) {
+        const old = q.docs[0];
+        const data = old.data() || {};
+        console.log('[auth/me] migrando doc desde', old.id, '→', tokenUid);
+        await userRef.set(
+          {
+            ...data,
+            uid: tokenUid,
+            migratedFrom: old.id,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+        // opcional: borrar el viejo
+        // await old.ref.delete();
+        snap = await userRef.get();
+      }
+    }
+
+    // 3) Si todavía no existe, lo autocreamos mínimo
     if (!snap.exists) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado en la colección Users",
-      });
+      console.log('[auth/me] autoprovisionando Users/', tokenUid);
+      const data = {
+        uid: tokenUid,
+        email: decoded.email || '',
+        displayName: decoded.name || '',
+        role: 'user',
+        isActive: true,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+      await userRef.set(data, { merge: true });
+      snap = await userRef.get();
     }
-    const data = snap.data() || {};
 
-    // 4) Responder
+    const data = snap.data() || {};
     return res.json({
       success: true,
       user: {
         uid: tokenUid,
-        email: decoded.email || "",
-        displayName: data.displayName || "",
-        role: data.role || "",
-        ...data, // si quieres exponer más campos del doc
+        email: data.email || decoded.email || '',
+        displayName: data.displayName || data.name || '',
+        role: data.role || 'user',
+        isActive: data.isActive !== undefined ? data.isActive : true,
+        ...data,
       },
     });
   } catch (error) {
-    console.error("Error en /auth/me:", error);
-    // Firebase Admin lanza errores con 'code' (auth/invalid-id-token, etc.)
-    if (
-      error?.code === "auth/argument-error" ||
-      error?.code === "auth/invalid-id-token"
-    ) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Token inválido" });
+    console.error('Error en /auth/me:', error);
+    if (error?.code === 'auth/invalid-id-token' || error?.code === 'auth/argument-error') {
+      return res.status(401).json({ success: false, message: 'Token inválido' });
     }
-    if (String(error?.code).includes("permission-denied")) {
-      // NO debería pasar con Admin; si pasa, hay problema de inicialización del Admin SDK
-      return res
-        .status(500)
-        .json({ success: false, message: "Admin SDK sin permisos" });
-    }
-    return res
-      .status(500)
-      .json({ success: false, message: "Error interno del servidor" });
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 });
 
