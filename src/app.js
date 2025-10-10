@@ -89,10 +89,10 @@ function mount(path, loader) {
 mount("routes/login_user/login_user.js", () => require("./routes/login_user/login_user"));
 mount("routes/menu/menu.js", () => require("./routes/menu/menu"));
 
-// 🔸 Aquí montamos el router correcto para /records
-mount("routes/forms/registers.js", () => require("./routes/forms/registers"));
+// 🔸 Router correcto para /records (tu archivo real está en forms_list)
+mount("routes/forms_list/forms_list.js", () => require("./routes/forms_list/forms_list"));
 
-// 🔸 Y el router de estadísticas /records/stats
+// 🔸 Router de estadísticas /records/stats
 mount("routes/stats/stats.js", () => require("./routes/stats/stats"));
 
 mount("routes/create_user/create_user.js", () => require("./routes/create_user/create_user"));
