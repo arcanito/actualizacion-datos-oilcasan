@@ -1,102 +1,96 @@
-// src/routes/forms_list/forms_list.js
+// routes/forms/registers.js
 const { Router } = require('express');
-const { adminAuth, adminDb } = require('../../firebase'); // Admin SDK
-const { Timestamp } = require('firebase-admin/firestore');
+const { db } = require('../../firebase');
+const { collection, getDocs, getDoc, addDoc, doc, Timestamp, orderBy, query } = require('firebase/firestore');
 
 const router = Router();
 
-/* ───────────────── Auth simple: requiere ID token válido (NO rol admin) ───────────────── */
-async function requireAuth(req, res, next) {
+// Obtener todos los formularios
+router.get('/records', async (req, res) => {
   try {
-    const hdr = req.headers.authorization || '';
-    if (!hdr.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'Token no proporcionado' });
-    }
-    const idToken = hdr.slice(7).trim();
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    req.user = { uid: decoded.uid, email: decoded.email || null };
-    return next();
-  } catch (e) {
-    return res.status(401).json({
-      success: false,
-      message: e?.code === 'auth/id-token-expired' ? 'Token expirado' : 'Token inválido o expirado',
-      code: e?.code || null,
-    });
-  }
-}
+    const formsRef = collection(db, 'Formularios');
+    const q = query(formsRef, orderBy('creadoEn', 'desc'));
+    const snapshot = await getDocs(q);
 
-/* ───────────────── GET /records: lista de formularios (recientes primero) ───────────────── */
-router.get('/records', requireAuth, async (_req, res) => {
-  try {
-    const snap = await adminDb
-      .collection('Formularios')
-      .orderBy('creadoEn', 'desc')
-      .get();
-
-    const records = snap.docs.map((d) => {
-      const x = d.data() || {};
+    const forms = snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
       return {
-        id: d.id,
-        codigo: x.codigo || '',
-        nombre: x.nombre || '',
-        area: x.area || '',
-        // Deja el Timestamp tal cual para que el front use .seconds si existe
-        creadoEn: x.creadoEn ?? null,
+        id: docSnap.id,
+        codigo: data.codigo || '',
+        nombre: data.nombre || '',
+        area: data.area || '',
+        creadoEn: data.creadoEn || ''
       };
     });
 
-    return res.json({ success: true, records });
+    res.json({ success: true, records: forms });
   } catch (error) {
-    console.error('[records GET]', error);
-    return res.status(500).json({ success: false, message: 'Error al obtener registros' });
+    console.error('Error al obtener formularios:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener formularios'
+    });
   }
 });
 
-/* ───────────────── GET /records/:id: detalle de un formulario ───────────────── */
-router.get('/records/:id', requireAuth, async (req, res) => {
+// Obtener un formulario por ID (keys originales)
+router.get('/records/:id', async (req, res) => {
   try {
-    const ref = adminDb.doc(`Formularios/${req.params.id}`);
-    const doc = await ref.get();
-    if (!doc.exists) {
+    const formRef = doc(db, 'Formularios', req.params.id);
+    const formSnap = await getDoc(formRef);
+
+    if (!formSnap.exists()) {
       return res.status(404).json({ success: false, message: 'Formulario no encontrado' });
     }
-    return res.json({ success: true, record: { id: doc.id, ...doc.data() } });
+
+    const data = formSnap.data();
+
+    // Si hay campos tipo Timestamp, formatearlos
+    Object.keys(data).forEach(key => {
+      if (data[key]?.seconds) {
+        data[key] = new Date(data[key].seconds * 1000).toLocaleDateString("es-CO");
+      }
+    });
+
+    res.json({
+      id: formSnap.id,
+      ...data
+    });
   } catch (error) {
-    console.error('[records GET /:id]', error);
-    return res.status(500).json({ success: false, message: 'Error al obtener el formulario' });
+    console.error('Error al obtener formulario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el formulario'
+    });
   }
 });
 
-/* ───────────────── POST /records: crear un formulario ───────────────── */
-router.post('/records', requireAuth, async (req, res) => {
+// Guardar nuevo formulario
+router.post('/records', async (req, res) => {
   try {
-    const formData = req.body || {};
+    const formData = req.body;
 
     if (!formData.nombre || !formData.codigo) {
       return res.status(400).json({
         success: false,
-        message: 'Nombre y código son obligatorios',
+        message: 'Nombre y código son obligatorios'
       });
     }
 
-    const toSave = {
+    await addDoc(collection(db, 'Formularios'), {
       ...formData,
-      creadoEn: Timestamp.now(),
-      createdBy: req.user?.uid || null,
-    };
+      creadoEn: Timestamp.now()
+    });
 
-    const ref = await adminDb.collection('Formularios').add(toSave);
-
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
-      id: ref.id,
-      message: 'Formulario guardado exitosamente',
+      message: 'Formulario guardado exitosamente'
     });
   } catch (error) {
-    console.error('[records POST]', error);
-    return res.status(500).json({
+    console.error('Error al guardar formulario:', error);
+    res.status(500).json({
       success: false,
-      message: 'Error al guardar formulario',
+      message: 'Error al guardar formulario'
     });
   }
 });
