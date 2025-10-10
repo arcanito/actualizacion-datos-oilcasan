@@ -5,7 +5,7 @@ const { Timestamp } = require('firebase-admin/firestore');
 
 const router = Router();
 
-/* ===== Auth simple: requiere ID token válido, NO rol admin ===== */
+/* ───────────────── Auth simple: requiere ID token válido (NO rol admin) ───────────────── */
 async function requireAuth(req, res, next) {
   try {
     const hdr = req.headers.authorization || '';
@@ -25,7 +25,7 @@ async function requireAuth(req, res, next) {
   }
 }
 
-/* === GET /records: lista Formularios (más recientes primero) === */
+/* ───────────────── GET /records: lista de formularios (recientes primero) ───────────────── */
 router.get('/records', requireAuth, async (_req, res) => {
   try {
     const snap = await adminDb
@@ -33,14 +33,14 @@ router.get('/records', requireAuth, async (_req, res) => {
       .orderBy('creadoEn', 'desc')
       .get();
 
-    const records = snap.docs.map(d => {
+    const records = snap.docs.map((d) => {
       const x = d.data() || {};
       return {
         id: d.id,
         codigo: x.codigo || '',
         nombre: x.nombre || '',
         area: x.area || '',
-        // deja el Timestamp como viene para que el front use .seconds
+        // Deja el Timestamp tal cual para que el front use .seconds si existe
         creadoEn: x.creadoEn ?? null,
       };
     });
@@ -52,7 +52,7 @@ router.get('/records', requireAuth, async (_req, res) => {
   }
 });
 
-/* === GET /records/:id === */
+/* ───────────────── GET /records/:id: detalle de un formulario ───────────────── */
 router.get('/records/:id', requireAuth, async (req, res) => {
   try {
     const ref = adminDb.doc(`Formularios/${req.params.id}`);
@@ -67,7 +67,7 @@ router.get('/records/:id', requireAuth, async (req, res) => {
   }
 });
 
-/* === POST /records === */
+/* ───────────────── POST /records: crear un formulario ───────────────── */
 router.post('/records', requireAuth, async (req, res) => {
   try {
     const formData = req.body || {};
