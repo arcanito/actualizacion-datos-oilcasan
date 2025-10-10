@@ -1,7 +1,6 @@
-// routes/stats.js
+// src/routes/stats/stats.js  (o src/routes/stats.js si lo tienes así)
 const { Router } = require('express');
-const { db } = require('../../firebase');
-const { collection, getDocs } = require('firebase/firestore');
+const { adminAuth, adminDb } = require('../../firebase'); // <-- Admin SDK
 
 const router = Router();
 
@@ -12,47 +11,70 @@ const camposPermitidos = {
   etnia: 'Pertenece a una Etnia',
   religion: 'Religión',
   lgbtiq: 'Comunidad LGBTIQ+',
-  nivel_educativo: 'Nivel Educativo'
+  nivel_educativo: 'Nivel Educativo',
 };
 
-router.get('/records/stats', async (req, res) => {
+/* ===== Auth simple: requiere ID token válido, NO rol admin ===== */
+async function requireAuth(req, res, next) {
   try {
-    const snapshot = await getDocs(collection(db, 'Formularios'));
-    const forms = snapshot.docs.map(doc => doc.data());
+    const hdr = req.headers.authorization || '';
+    if (!hdr.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'Token no proporcionado' });
+    }
+    const token = hdr.slice(7).trim();
+    const decoded = await adminAuth.verifyIdToken(token);
+    req.user = { uid: decoded.uid, email: decoded.email || null };
+    return next();
+  } catch {
+    return res.status(401).json({ success: false, message: 'Token inválido o expirado' });
+  }
+}
 
-    if (forms.length === 0) {
+/**
+ * GET /records/stats
+ * Devuelve datos agregados para gráficos.
+ */
+router.get('/records/stats', requireAuth, async (_req, res) => {
+  try {
+    // Admin SDK: no aplica rules → adiós permission-denied
+    const snap = await adminDb.collection('Formularios').get();
+
+    if (snap.empty) {
       return res.json({});
     }
 
     const stats = {};
-
-    forms.forEach(form => {
-      for (const [campo, titulo] of Object.entries(camposPermitidos)) {
-        if (form[campo] !== undefined && form[campo] !== null && form[campo] !== '') {
-          const valor = String(form[campo]).trim();
+    for (const doc of snap.docs) {
+      const form = doc.data() || {};
+      for (const [campo, _titulo] of Object.entries(camposPermitidos)) {
+        const valorRaw = form[campo];
+        if (valorRaw !== undefined && valorRaw !== null && valorRaw !== '') {
+          const valor = String(valorRaw).trim();
           if (!stats[campo]) stats[campo] = {};
           stats[campo][valor] = (stats[campo][valor] || 0) + 1;
         }
       }
-    });
+    }
 
+    // Formato para charts (como tenías)
     const chartData = {};
-    Object.entries(stats).forEach(([campo, conteo]) => {
+    for (const [campo, conteo] of Object.entries(stats)) {
       chartData[campo] = {
         labels: Object.keys(conteo),
         data: Object.values(conteo),
+        // colores fijos (puedes cambiarlos)
         backgroundColor: [
           '#1a5f1a', '#4CAF50', '#8BC34A', '#FFC107',
           '#FF5722', '#2196F3', '#9C27B0', '#E91E63'
         ],
-        title: camposPermitidos[campo]
+        title: camposPermitidos[campo],
       };
-    });
+    }
 
-    res.json(chartData);
+    return res.json(chartData);
   } catch (error) {
-    console.error('Error obteniendo estadísticas:', error);
-    res.status(500).json({ message: 'Error obteniendo estadísticas' });
+    console.error('[records/stats GET]', error);
+    return res.status(500).json({ message: 'Error obteniendo estadísticas' });
   }
 });
 
