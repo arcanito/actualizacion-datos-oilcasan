@@ -9,7 +9,7 @@ const app = express();
 /* ===================== CORS (whitelist por HOST) ===================== */
 /** IMPORTANTE: solo host:puerto, SIN https:// ni barras */
 const ALLOWED_HOSTS = new Set([
-  // Fronts en Firebase Hosting (ajusta si cambian)
+  // Fronts en Firebase Hosting
   "registro-de-datos-oilcasan.web.app",
   "registro-de-datos-oilcasan.firebaseapp.com",
   "oilcasan-formulario.web.app",
@@ -19,14 +19,14 @@ const ALLOWED_HOSTS = new Set([
   "localhost:4000",
   "127.0.0.1:4000",
 
-  // Tu backend Render (útil si abres HTMLs de prueba ahí o haces llamadas desde ese origin)
+  // Backend Render
   "actualizacion-datos-oilcasan.onrender.com",
 ]);
 
 function originToHost(origin) {
-  if (!origin) return null; // Ej: curl/healthcheck, o mismo origen
+  if (!origin) return null; // curl/healthcheck, mismo origen, etc.
   try {
-    return new URL(origin).host; // p.ej. "registro-de-datos-oilcasan.web.app"
+    return new URL(origin).host;
   } catch {
     return null;
   }
@@ -36,7 +36,7 @@ app.use(
   cors({
     origin: (origin, cb) => {
       const host = originToHost(origin);
-      if (!host) return cb(null, true); // permite llamadas sin Origin (curl/Render health)
+      if (!host) return cb(null, true);
       if (ALLOWED_HOSTS.has(host)) return cb(null, true);
       return cb(new Error(`CORS not allowed for origin: ${origin}`));
     },
@@ -46,7 +46,6 @@ app.use(
     maxAge: 86400,
   })
 );
-// Opcional: responder preflight de forma explícita
 app.options("*", cors());
 
 /* ===================== Middlewares base ===================== */
@@ -78,9 +77,6 @@ app.get("/", (_req, res) =>
 );
 
 /* ===================== Rutas de la API ===================== */
-/** Ajusta los require si tu estructura difiere.
- *  Cada router ya define su propio path (ej: "/login_user", "/auth/me", etc.)
- */
 function mount(path, loader) {
   try {
     app.use(loader());
@@ -92,8 +88,13 @@ function mount(path, loader) {
 
 mount("routes/login_user/login_user.js", () => require("./routes/login_user/login_user"));
 mount("routes/menu/menu.js", () => require("./routes/menu/menu"));
-mount("routes/forms/forms.js", () => require("./routes/forms/forms"));
+
+// 🔸 Aquí montamos el router correcto para /records
+mount("routes/forms/registers.js", () => require("./routes/forms/registers"));
+
+// 🔸 Y el router de estadísticas /records/stats
 mount("routes/stats/stats.js", () => require("./routes/stats/stats"));
+
 mount("routes/create_user/create_user.js", () => require("./routes/create_user/create_user"));
 mount("routes/logout/logout.js", () => require("./routes/logout/logout"));
 mount("routes/password_reset/password_reset.js", () => require("./routes/password_reset/password_reset"));
